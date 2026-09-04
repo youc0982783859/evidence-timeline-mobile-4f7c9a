@@ -242,7 +242,7 @@
     .event-summary {
       list-style: none;
       display: grid;
-      grid-template-columns: auto minmax(0, 1fr) auto;
+      grid-template-columns: auto minmax(0, 1fr) auto auto;
       align-items: center;
       gap: 13px;
       padding: 18px 20px;
@@ -270,6 +270,26 @@
     }
 
     .event-card[open] .evidence-count { color: var(--accent); }
+
+    .drag-handle {
+      width: 44px;
+      height: 44px;
+      border: 0;
+      border-radius: 9px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--ink-soft);
+      background: transparent;
+      cursor: grab;
+    }
+
+    .drag-handle:hover { color: var(--ink); background: var(--paper-deep); }
+    .drag-handle:active { cursor: grabbing; }
+    .drag-handle svg { width: 20px; height: 20px; }
+    .event.dragging { opacity: .48; }
+    .event.drop-before .event-card { box-shadow: inset 0 4px 0 var(--blue), 0 5px 20px rgba(23, 38, 59, .07); }
+    .event.drop-after .event-card { box-shadow: inset 0 -4px 0 var(--blue), 0 5px 20px rgba(23, 38, 59, .07); }
 
     .event-body {
       padding: 5px 20px 22px 41px;
@@ -405,9 +425,10 @@
       .event::before { left: 4px; top: 12px; }
       .event-date { text-align: left; padding-top: 0; display: flex; gap: 8px; align-items: baseline; }
       .event-date span { margin-top: 0; }
-      .event-summary { grid-template-columns: auto minmax(0, 1fr); padding: 15px 13px; min-height: 72px; }
+      .event-summary { grid-template-columns: auto minmax(0, 1fr) auto; padding: 15px 13px; min-height: 72px; }
       .event-title, .event-title strong, .event-meta { overflow-wrap: anywhere; }
       .evidence-count { grid-column: 2; }
+      .drag-handle { grid-column: 3; grid-row: 1 / span 2; }
       .event-body { padding: 3px 13px 18px; }
       .edit-grid { grid-template-columns: 1fr; }
       .edit-grid .wide { grid-column: auto; }
@@ -424,7 +445,7 @@
       body { background: #fff; color: #101820; font-size: 10.5pt; }
       .app-shell { width: 100%; margin: 0; box-shadow: none; min-height: auto; background: #fff; }
       .masthead { color: #101820; background: #fff; padding: 0 0 10mm; border-bottom: 2px solid #17263b; }
-      .masthead::after, .toolbar, .section-heading p, .edit-grid, .evidence-remove, .file-input, .upload-label { display: none !important; }
+      .masthead::after, .toolbar, .section-heading p, .edit-grid, .evidence-remove, .file-input, .upload-label, .drag-handle { display: none !important; }
       .masthead h1 { font-size: 25pt; }
       .subtitle { color: #46515c; margin-top: 2mm; }
       main { padding: 8mm 0 0; }
@@ -512,7 +533,7 @@
       <section>
         <div class="section-heading">
           <h2>事件時間線</h2>
-          <p>點選事件展開編輯與上傳區</p>
+          <p>點選事件展開；拖曳右側把手可調整順序</p>
         </div>
         <div class="timeline" id="timeline"></div>
       </section>
@@ -669,6 +690,9 @@
                 <span class="kind-mark" aria-hidden="true"></span>
                 <span class="event-title"><strong>${escapeHtml(event.description)}</strong><span class="event-meta">${escapeHtml(event.actor)} · ${escapeHtml(KIND_LABELS[event.kind] || '其他')}${event.amount ? ` · ${escapeHtml(event.amount)} 元` : ''}</span></span>
                 <span class="evidence-count">${count ? `已附 ${count} 張` : '尚無附件'}</span>
+                <button class="drag-handle" type="button" draggable="true" aria-label="拖曳調整此事件順序" title="拖曳調整順序">
+                  <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="8" cy="5" r="1.6"/><circle cx="16" cy="5" r="1.6"/><circle cx="8" cy="12" r="1.6"/><circle cx="16" cy="12" r="1.6"/><circle cx="8" cy="19" r="1.6"/><circle cx="16" cy="19" r="1.6"/></svg>
+                </button>
               </summary>
               <div class="event-body">
                 <div class="edit-grid">
@@ -708,25 +732,12 @@
       document.querySelector('#missingTotal').textContent = events.length - coveredEvents;
     }
 
-    function sortEvents() {
-      events.sort((a, b) => {
-        const dateA = /^\d{2}\/\d{2}$/.test(a.date) ? a.date : '99/99';
-        const dateB = /^\d{2}\/\d{2}$/.test(b.date) ? b.date : '99/99';
-        const timeA = a.id === '0603-deposit' ? '00:00' : /^\d{2}:\d{2}/.test(a.time) ? a.time.slice(0, 5) : '99:99';
-        const timeB = b.id === '0603-deposit' ? '00:00' : /^\d{2}:\d{2}/.test(b.time) ? b.time.slice(0, 5) : '99:99';
-        return `${dateA} ${timeA}`.localeCompare(`${dateB} ${timeB}`);
-      });
-    }
-
-    sortEvents();
-
     timeline.addEventListener('change', async event => {
       const field = event.target.dataset.field;
       if (field) {
         const eventId = event.target.closest('[data-event-id]').dataset.eventId;
         const item = events.find(entry => entry.id === eventId);
         item[field] = event.target.value.trim();
-        if (field === 'date' || field === 'time') sortEvents();
         saveEvents();
         render();
         document.querySelector(`[data-event-id="${CSS.escape(eventId)}"] details`).open = true;
@@ -760,6 +771,11 @@
     });
 
     timeline.addEventListener('click', async event => {
+      if (event.target.closest('.drag-handle')) {
+        event.preventDefault();
+        return;
+      }
+
       const button = event.target.closest('[data-remove-evidence]');
       if (!button) return;
       if (!confirm('確定要刪除這張證據嗎？')) return;
@@ -771,10 +787,69 @@
     });
 
     timeline.addEventListener('keydown', event => {
+      const handle = event.target.closest('.drag-handle');
+      if (handle && ['ArrowUp', 'ArrowDown'].includes(event.key)) {
+        event.preventDefault();
+        const eventId = handle.closest('[data-event-id]').dataset.eventId;
+        const fromIndex = events.findIndex(item => item.id === eventId);
+        const toIndex = fromIndex + (event.key === 'ArrowUp' ? -1 : 1);
+        if (toIndex < 0 || toIndex >= events.length) return;
+        const [moved] = events.splice(fromIndex, 1);
+        events.splice(toIndex, 0, moved);
+        saveEvents();
+        render();
+        document.querySelector(`[data-event-id="${CSS.escape(eventId)}"] .drag-handle`).focus();
+        announce('事件順序已儲存');
+        return;
+      }
+
       const label = event.target.closest('.upload-label');
       if (!label || !['Enter', ' '].includes(event.key)) return;
       event.preventDefault();
       document.getElementById(label.htmlFor).click();
+    });
+
+    let draggedEventId = '';
+
+    timeline.addEventListener('dragstart', event => {
+      const handle = event.target.closest('.drag-handle');
+      if (!handle) return;
+      const item = handle.closest('[data-event-id]');
+      draggedEventId = item.dataset.eventId;
+      item.classList.add('dragging');
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/plain', draggedEventId);
+    });
+
+    timeline.addEventListener('dragover', event => {
+      if (!draggedEventId) return;
+      const target = event.target.closest('[data-event-id]');
+      if (!target || target.dataset.eventId === draggedEventId) return;
+      event.preventDefault();
+      document.querySelectorAll('.drop-before, .drop-after').forEach(item => item.classList.remove('drop-before', 'drop-after'));
+      const after = event.clientY > target.getBoundingClientRect().top + target.offsetHeight / 2;
+      target.classList.add(after ? 'drop-after' : 'drop-before');
+    });
+
+    timeline.addEventListener('drop', event => {
+      const target = event.target.closest('[data-event-id]');
+      if (!draggedEventId || !target || target.dataset.eventId === draggedEventId) return;
+      event.preventDefault();
+      const after = target.classList.contains('drop-after');
+      const fromIndex = events.findIndex(item => item.id === draggedEventId);
+      const [moved] = events.splice(fromIndex, 1);
+      let toIndex = events.findIndex(item => item.id === target.dataset.eventId);
+      if (after) toIndex += 1;
+      events.splice(toIndex, 0, moved);
+      saveEvents();
+      render();
+      announce('事件順序已儲存');
+      draggedEventId = '';
+    });
+
+    timeline.addEventListener('dragend', () => {
+      draggedEventId = '';
+      document.querySelectorAll('.dragging, .drop-before, .drop-after').forEach(item => item.classList.remove('dragging', 'drop-before', 'drop-after'));
     });
 
     document.querySelector('#addButton').addEventListener('click', () => {
