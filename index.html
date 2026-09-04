@@ -523,8 +523,8 @@
 
   <script>
     const DEFAULT_EVENTS = [
-      { id: '0603-line', date: '06/03', time: '12:56–16:48', actor: '工程行', kind: 'conversation', description: 'LINE 對話＋合約簽名截圖', amount: '' },
       { id: '0603-deposit', date: '06/03', time: '15:19', actor: 'COCO', kind: 'deposit', description: '存入 15 萬元', amount: '150,000' },
+      { id: '0603-line', date: '06/03', time: '12:56–16:48', actor: '工程行', kind: 'conversation', description: 'LINE 對話＋合約簽名截圖', amount: '' },
       { id: '0603-atm', date: '06/03', time: '16:44', actor: '工程行', kind: 'withdrawal', description: 'ATM 提領現金 5 萬元', amount: '50,000' },
       { id: '0603-rebate', date: '06/03', time: '未註明', actor: '工程行', kind: 'rebate', description: '給我回扣 1 萬元（LINE 記事本截圖）', amount: '10,000' },
       { id: '0612-deposit', date: '06/12', time: '14:11', actor: 'COCO', kind: 'deposit', description: '存入 28.5 萬元', amount: '285,000' },
@@ -712,11 +712,13 @@
       events.sort((a, b) => {
         const dateA = /^\d{2}\/\d{2}$/.test(a.date) ? a.date : '99/99';
         const dateB = /^\d{2}\/\d{2}$/.test(b.date) ? b.date : '99/99';
-        const timeA = /^\d{2}:\d{2}/.test(a.time) ? a.time.slice(0, 5) : '99:99';
-        const timeB = /^\d{2}:\d{2}/.test(b.time) ? b.time.slice(0, 5) : '99:99';
+        const timeA = a.id === '0603-deposit' ? '00:00' : /^\d{2}:\d{2}/.test(a.time) ? a.time.slice(0, 5) : '99:99';
+        const timeB = b.id === '0603-deposit' ? '00:00' : /^\d{2}:\d{2}/.test(b.time) ? b.time.slice(0, 5) : '99:99';
         return `${dateA} ${timeA}`.localeCompare(`${dateB} ${timeB}`);
       });
     }
+
+    sortEvents();
 
     timeline.addEventListener('change', async event => {
       const field = event.target.dataset.field;
